@@ -13,7 +13,17 @@
 
 Это **минимальная самостоятельная система**, а не полная совместимая копия OpenOS: пока нет многозадачности, POSIX-прав, монтирования нескольких дисков (работает загрузочный диск), сетевого стека, пакетного менеджера и полного набора OpenOS API. Используй Lua-скрипты и команды только из доверенных источников.
 
-## Установка на загрузочный диск
+## Установка одной командой из OpenOS
+
+Нужны запущенная OpenOS, интернет-карта в компьютере и разрешённый HTTP(S) в конфигурации OpenComputers. Вставь эту строку в терминал OpenOS:
+
+```text
+wget -f https://raw.githubusercontent.com/FoxFord1A/AstraOS-OpenComputers/main/install-online.lua /tmp/astraos-install.lua && lua /tmp/astraos-install.lua
+```
+
+Установщик скачает и проверит загрузчик с ядром, покажет список доступных для записи дисков и запросит номер нужного. Перед записью он попросит ввести `INSTALL`. Старые `/init.lua` и `/system/main.lua`, если они есть, будут сохранены как `/init.lua.astraos-backup` и `/system/main.lua.astraos-backup`. После установки выбери этот диск в EEPROM/BIOS как boot filesystem и перезагрузи компьютер. Оператор `&&` поддерживается штатной командной оболочкой OpenOS.
+
+## Ручная установка на загрузочный диск
 
 1. Скопируй папку `astraos` на диск/флоппи, который доступен из работающей OpenOS.
 2. В OpenOS перечисли файловые компоненты командой `components` или в Lua-коде через `component.list("filesystem", true)`.
@@ -31,7 +41,7 @@
 
 ## Восстановление OpenOS
 
-Загрузи OpenOS с другого носителя и восстанови резервную копию старого загрузчика: переименуй `/init.lua.astraos-backup` обратно в `/init.lua` на установленном диске. Если резервной копии не было, переустанови OpenOS на этот носитель.
+Загрузи OpenOS с другого носителя и восстанови резервные копии, если они есть: `/init.lua.astraos-backup` переименуй обратно в `/init.lua`, а `/system/main.lua.astraos-backup` — обратно в `/system/main.lua` на установленном диске. Если резервной копии не было, переустанови OpenOS на этот носитель.
 
 ## Структура
 
@@ -39,6 +49,7 @@
 init.lua            BIOS entry point
 system/main.lua     ядро и интерактивная оболочка
 install.lua         установщик для работающей OpenOS
+install-online.lua  онлайн-установщик для OpenOS
 ```
 
 ## Совместимость и проверка
@@ -48,8 +59,9 @@ install.lua         установщик для работающей OpenOS
 Проверка синтаксиса и имитационный запуск на компьютере с Lua 5.2/5.3:
 
 ```sh
-luac -p init.lua system/main.lua install.lua tests/smoke.lua
+luac -p init.lua system/main.lua install.lua install-online.lua tests/*.lua
 lua tests/smoke.lua .
+lua tests/install_online.lua .
 ```
 
 Smoke-тест подменяет OpenComputers-компоненты и проверяет, что загрузчик обнаруживает файловую систему, запускает ядро, рисует консоль и выполняет команду `about`.

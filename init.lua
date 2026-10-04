@@ -97,7 +97,33 @@ local function collectFilesystems()
   return entries
 end
 
-local function drawBootMenu(gpu, width, height, entries, selected, secondsLeft, message)
+local function drawBootPrompt(gpu, width, height, defaultEntry, canSelect)
+  pcall(gpu.setBackground, BG)
+  pcall(gpu.setForeground, FG)
+  pcall(gpu.fill, 1, 1, width, height, " ")
+  local function line(y, text, color)
+    if y < 1 or y > height then return end
+    pcall(gpu.setBackground, BG)
+    pcall(gpu.setForeground, color or FG)
+    pcall(gpu.fill, 1, y, width, 1, " ")
+    pcall(gpu.set, 2, y, clip(text, math.max(0, width - 2)))
+  end
+  line(2, "       /\\", ACCENT)
+  line(3, "      /  \\    A S T R A O S", ACCENT)
+  line(4, "     /____\\", ACCENT)
+  line(6, "ASTRAOS BIOS", FG)
+  if canSelect then
+    line(8, "Press ENTER within 2 seconds", ACCENT)
+    line(9, "to choose a boot device.", ACCENT)
+  else
+    line(8, "No keyboard detected.", MUTED)
+    line(9, "Starting the default device.", MUTED)
+  end
+  line(11, "Default: " .. tostring(defaultEntry.label), FG)
+  line(13, "RAID appears as one filesystem.", MUTED)
+end
+
+local function drawBootMenu(gpu, width, height, entries, selected, message)
   pcall(gpu.setBackground, BG)
   pcall(gpu.setForeground, FG)
   pcall(gpu.fill, 1, 1, width, height, " ")
@@ -137,8 +163,8 @@ local function drawBootMenu(gpu, width, height, entries, selected, secondsLeft, 
     line(firstRow + maxRows, string.format("Showing %d-%d of %d", firstEntry, lastEntry, #entries), MUTED)
   end
   if message then line(height - 2, message, 0xFFCC66) end
-  line(height - 1, string.format("UP/DOWN select | ENTER boot/save | auto %ds", secondsLeft), MUTED)
-  line(height, "RAID arrays appear here as one filesystem component.", MUTED)
+  line(height - 1, "UP/DOWN select | ENTER boot and save", MUTED)
+  line(height, "ESC: default device | RAID is a filesystem", MUTED)
 end
 
 local function saveBootChoice(entry)
@@ -164,6 +190,7 @@ local function chooseFilesystem(entries)
     end
   end
   if not selected then return nil end
+  local defaultSelected = selected
 
   local gpuAddress, screenAddress = firstComponent("gpu"), firstComponent("screen")
   local keyboardAddress = firstComponent("keyboard")
@@ -172,51 +199,63 @@ local function chooseFilesystem(entries)
     local ok, proxy = pcall(component.proxy, gpuAddress)
     if ok then gpu = proxy end
   end
-  if not gpu then return saveBootChoice(entries[selected]) end
+  if not gpu then return entries[selected].fs, entries[selected].address end
 
   pcall(gpu.bind, screenAddress)
   local width, height = 80, 25
   pcall(function() width, height = gpu.getResolution() end)
-  drawBootMenu(gpu, width, height, entries, selected, keyboardAddress and 5 or 0)
-  if not keyboardAddress then return saveBootChoice(entries[selected]) end
+  drawBootPrompt(gpu, width, height, entries[selected], keyboardAddress ~= nil)
+  if not keyboardAddress then return entries[selected].fs, entries[selected].address end
 
-  local timeoutTicks, elapsed = 20, 0 -- five seconds, polling every 0.25 s
-  while elapsed < timeoutTicks do
-    local ok, signal, _, char, code = pcall(computer.pullSignal, 0.25)
+  local openMenu = false
+  local clockOk, startTime = false, 0
+  if computer.uptime then clockOk, startTime = pcall(computer.uptime) end
+  local pollCount = 0
+  while true do
+    local remaining = 0.1
+    if clockOk then
+      local nowOk, now = pcall(computer.uptime)
+      if not nowOk or now - startTime >= 2 then break end
+      remaining = math.min(0.1, 2 - (now - startTime))
+    elseif pollCount >= 20 then
+      break
+    end
+    local ok, signal, _, char, code = pcall(computer.pullSignal, remaining)
     if not ok then break end
-    local changed = false
+    if signal == "key_down" and (code == 28 or char == 13) then
+      openMenu = true
+      break
+    end
+    pollCount = pollCount + 1
+  end
+  if not openMenu then return entries[defaultSelected].fs, entries[defaultSelected].address end
+
+  drawBootMenu(gpu, width, height, entries, selected)
+  local message
+  while true do
+    local ok, signal, _, char, code = pcall(computer.pullSignal)
+    if not ok then return entries[defaultSelected].fs, entries[defaultSelected].address end
     if signal == "key_down" then
       if code == 200 then
         selected = selected - 1
         if selected < 1 then selected = #entries end
-        changed = true
+        message = nil
       elseif code == 208 then
         selected = selected + 1
         if selected > #entries then selected = 1 end
-        changed = true
+        message = nil
       elseif code == 28 or char == 13 then
         if entries[selected].bootable then return saveBootChoice(entries[selected]) end
-        drawBootMenu(gpu, width, height, entries, selected, math.max(0, 5 - math.floor(elapsed / 4)), "This filesystem has no /system/main.lua")
-        elapsed = 0
+        message = "This filesystem has no /system/main.lua"
+      elseif code == 1 then
+        return entries[defaultSelected].fs, entries[defaultSelected].address
       elseif type(char) == "number" and char >= 49 and char <= 57 then
         local target = char - 48
-        if entries[target] and entries[target].bootable then return saveBootChoice(entries[target]) end
-        if entries[target] then
-          selected = target
-          changed = true
-        end
+        if entries[target] then selected = target; message = nil end
       end
-      if changed then
-        elapsed = 0
-        drawBootMenu(gpu, width, height, entries, selected, 5)
-      end
-    end
-    elapsed = elapsed + 1
-    if elapsed % 4 == 0 then
-      drawBootMenu(gpu, width, height, entries, selected, math.max(0, 5 - math.floor(elapsed / 4)))
+      drawBootMenu(gpu, width, height, entries, selected, message)
     end
   end
-  return saveBootChoice(entries[selected])
 end
 
 local filesystems = collectFilesystems()

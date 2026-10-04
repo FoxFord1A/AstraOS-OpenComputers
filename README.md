@@ -4,7 +4,8 @@
 
 ## Что уже работает
 
-- BIOS-загрузчик с логотипом AstraOS и меню выбора подключённой файловой системы, диска или RAID-массива с AstraOS; выбор стрелками и Enter сохраняется в EEPROM как boot address, без выбора запускается текущий вариант через 5 секунд;
+- BIOS-загрузчик показывает логотип и в течение 2 секунд приглашает нажать `ENTER`, чтобы открыть меню загрузочных устройств; если клавишу не нажать, запускается устройство по умолчанию;
+- в самом меню нет таймера autoboot: стрелки выбирают диск/RAID, `ENTER` загружает и сохраняет его как boot address в EEPROM, `ESC` возвращает загрузку по умолчанию;
 - RAID в OpenComputers представлен одной файловой системой и отображается в этом же меню по метке и объёму;
 - консоль на GPU + Screen, ввод с клавиатуры, история команд (стрелки вверх/вниз), backspace;
 - базовые команды OpenOS: `ls`, `cd`, `pwd`, `cat`, `head`, `tail`, `grep`, `wc`, `find`, `tree`, `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `du`, `df`, `which`, `alias`, `unalias`, `history`, `man`, `echo`, `clear`, `lua`, `edit`, `sleep`, `wget`, `date`, `uptime`, `free`, `hostname`, `address`, `components`, `resolution`, `reboot`, `shutdown`;
@@ -67,6 +68,6 @@ lua tests/smoke.lua .
 lua tests/install_online.lua .
 ```
 
-Smoke-тест подменяет OpenComputers-компоненты и проверяет логотип BIOS, выбор RAID-файловой системы, сохранение boot address, запуск ядра и несколько команд оболочки. Отдельный тест имитирует скачивание и установку с сохранением резервных копий.
+Smoke-тест подменяет OpenComputers-компоненты и проверяет BIOS-логотип, двухсекундную горячую клавишу, выбор RAID-файловой системы, сохранение boot address, запуск ядра и несколько команд оболочки. Отдельный тест имитирует скачивание и установку с сохранением резервных копий.
 
 Документация и сверка совместимости: [Custom OSes](https://ocdoc.cil.li/tutorial:custom_oses), [Computer API](https://ocdoc.cil.li/api:computer), [Component API](https://ocdoc.cil.li/api:component), [Filesystem component](https://ocdoc.cil.li/component:filesystem), [описание RAID-блока](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/doc/en_US/block/raid.md), [GPU component](https://ocdoc.cil.li/component:gpu), [Internet component](https://ocdoc.cil.li/component:internet), [официальный каталог команд OpenOS](https://github.com/MightyPirates/OpenComputers/tree/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/openos/bin), [OpenOS shell parser](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/openos/lib/sh.lua), [исходник OpenOS wget](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/plan9k/bin/wget.lua).

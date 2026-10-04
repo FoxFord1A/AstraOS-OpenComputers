@@ -110,6 +110,7 @@ component.proxy = function(address)
 end
 
 local signals = {
+  {"key_down", "keyboard", 13, 28}, -- open the device menu during the prompt
   {"key_down", "keyboard", 0, 208}, -- choose the RAID filesystem
   {"key_down", "keyboard", 0, 28}   -- boot and remember it
 }
@@ -151,6 +152,7 @@ assert(not ok and tostring(err):find("TEST_STOP", 1, true), "test sentinel did n
 local screenText = table.concat(drawn, "\n")
 assert(savedBootAddress == "raidaddr", "BIOS did not save the selected RAID boot address")
 assert(screenText:find("A S T R A O S", 1, true), "BIOS logo was not rendered")
+assert(screenText:find("Press ENTER within 2 seconds", 1, true), "BIOS selection prompt was not rendered")
 assert(screenText:find("RAID", 1, true), "RAID filesystem was not listed in the BIOS menu")
 assert(screenText:find("AstraOS 0.2", 1, true), "boot banner was not rendered")
 assert(screenText:find("компактная ОС", 1, true), "about command did not run")

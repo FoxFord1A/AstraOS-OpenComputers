@@ -4,7 +4,8 @@
 
 ## Что уже работает
 
-- загрузка через `/init.lua`, выбор файловой системы с `/system/main.lua`;
+- BIOS-загрузчик с логотипом AstraOS и меню выбора подключённой файловой системы, диска или RAID-массива с AstraOS; выбор стрелками и Enter сохраняется в EEPROM как boot address, без выбора запускается текущий вариант через 5 секунд;
+- RAID в OpenComputers представлен одной файловой системой и отображается в этом же меню по метке и объёму;
 - консоль на GPU + Screen, ввод с клавиатуры, история команд (стрелки вверх/вниз), backspace;
 - базовые команды OpenOS: `ls`, `cd`, `pwd`, `cat`, `head`, `tail`, `grep`, `wc`, `find`, `tree`, `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `du`, `df`, `which`, `alias`, `unalias`, `history`, `man`, `echo`, `clear`, `lua`, `edit`, `sleep`, `wget`, `date`, `uptime`, `free`, `hostname`, `address`, `components`, `resolution`, `reboot`, `shutdown`;
 - распространённые флаги: `ls -la`, `mkdir -p`, `cp -r`, `rm -r`/`rm -f`, `head -n N`, `tail -n N`, `grep -i`/`-n`/`-v`;
@@ -23,7 +24,7 @@
 wget -f https://raw.githubusercontent.com/FoxFord1A/AstraOS-OpenComputers/main/install-online.lua /tmp/astraos-install.lua && lua /tmp/astraos-install.lua
 ```
 
-Установщик скачает и проверит загрузчик с ядром, покажет список доступных для записи дисков и запросит номер нужного. Перед записью он попросит ввести `INSTALL`. Старые `/init.lua` и `/system/main.lua`, если они есть, будут сохранены как `/init.lua.astraos-backup` и `/system/main.lua.astraos-backup`. После установки выбери этот диск в EEPROM/BIOS как boot filesystem и перезагрузи компьютер. Оператор `&&` поддерживается штатной командной оболочкой OpenOS.
+Установщик скачает и проверит загрузчик с ядром, покажет список доступных для записи дисков и запросит номер нужного. Перед записью он попросит ввести `INSTALL`. Старые `/init.lua` и `/system/main.lua`, если они есть, будут сохранены как `/init.lua.astraos-backup` и `/system/main.lua.astraos-backup`. После установки выбери этот диск или RAID в EEPROM/BIOS как boot filesystem и перезагрузи компьютер; затем меню AstraOS позволит переключить источник и запомнит выбранный. Оператор `&&` поддерживается штатной командной оболочкой OpenOS.
 
 ## Ручная установка на загрузочный диск
 
@@ -66,6 +67,6 @@ lua tests/smoke.lua .
 lua tests/install_online.lua .
 ```
 
-Smoke-тест подменяет OpenComputers-компоненты и проверяет запуск ядра и несколько команд оболочки. Отдельный тест имитирует скачивание и установку с сохранением резервных копий.
+Smoke-тест подменяет OpenComputers-компоненты и проверяет логотип BIOS, выбор RAID-файловой системы, сохранение boot address, запуск ядра и несколько команд оболочки. Отдельный тест имитирует скачивание и установку с сохранением резервных копий.
 
-Документация и сверка совместимости: [Custom OSes](https://ocdoc.cil.li/tutorial:custom_oses), [Computer API](https://ocdoc.cil.li/api:computer), [Component API](https://ocdoc.cil.li/api:component), [Filesystem component](https://ocdoc.cil.li/component:filesystem), [GPU component](https://ocdoc.cil.li/component:gpu), [Internet component](https://ocdoc.cil.li/component:internet), [официальный каталог команд OpenOS](https://github.com/MightyPirates/OpenComputers/tree/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/openos/bin), [OpenOS shell parser](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/openos/lib/sh.lua), [исходник OpenOS wget](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/plan9k/bin/wget.lua).
+Документация и сверка совместимости: [Custom OSes](https://ocdoc.cil.li/tutorial:custom_oses), [Computer API](https://ocdoc.cil.li/api:computer), [Component API](https://ocdoc.cil.li/api:component), [Filesystem component](https://ocdoc.cil.li/component:filesystem), [описание RAID-блока](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/doc/en_US/block/raid.md), [GPU component](https://ocdoc.cil.li/component:gpu), [Internet component](https://ocdoc.cil.li/component:internet), [официальный каталог команд OpenOS](https://github.com/MightyPirates/OpenComputers/tree/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/openos/bin), [OpenOS shell parser](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/openos/lib/sh.lua), [исходник OpenOS wget](https://github.com/MightyPirates/OpenComputers/blob/master-MC1.7.10/src/main/resources/assets/opencomputers/loot/plan9k/bin/wget.lua).

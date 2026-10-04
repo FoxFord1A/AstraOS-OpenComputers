@@ -1,29 +1,33 @@
--- AstraOS bootstrap for OpenComputers.
+-- AstraOS BIOS bootstrap for OpenComputers.
 -- Runs directly in the Lua BIOS environment; does not depend on OpenOS libraries.
+local BG, FG, ACCENT, MUTED = 0x101820, 0xE6EDF3, 0x55D6BE, 0x8B98A5
+
+local function firstComponent(kind)
+  local iter = component.list(kind, true)
+  local address = iter and iter()
+  return address
+end
+
 local function pauseForever()
   while true do computer.pullSignal() end
 end
 
 local function showFailure(message)
-  local gpuAddress
-  local iter = component.list("gpu", true)
-  if iter then gpuAddress = iter() end
+  local gpuAddress = firstComponent("gpu")
+  local screenAddress = firstComponent("screen")
   if gpuAddress then
     local ok, gpu = pcall(component.proxy, gpuAddress)
     if ok and gpu then
-      pcall(gpu.bind, (function()
-        local screens = component.list("screen", true)
-        return screens and screens()
-      end)())
+      pcall(gpu.bind, screenAddress)
       local w, h = 50, 16
       pcall(function() w, h = gpu.getResolution() end)
-      pcall(gpu.setBackground, 0x101820)
+      pcall(gpu.setBackground, BG)
       pcall(gpu.setForeground, 0xFF6666)
       pcall(gpu.fill, 1, 1, w, h, " ")
-      pcall(gpu.set, 2, 2, "AstraOS: ошибка загрузки")
-      pcall(gpu.setForeground, 0xFFFFFF)
+      pcall(gpu.set, 2, 2, "ASTRAOS BIOS - BOOT ERROR")
+      pcall(gpu.setForeground, FG)
       pcall(gpu.set, 2, 4, tostring(message):sub(1, math.max(1, w - 2)))
-      pcall(gpu.set, 2, 6, "Проверьте init.lua и /system/main.lua")
+      pcall(gpu.set, 2, 6, "Check init.lua and /system/main.lua")
     end
   else
     pcall(computer.beep, 440, 0.5)
@@ -33,7 +37,7 @@ end
 
 local function readFile(fs, path)
   local handle, reason = fs.open(path, "r")
-  if not handle then return nil, reason or "не удалось открыть файл" end
+  if not handle then return nil, reason or "could not open file" end
   local chunks = {}
   while true do
     local data, err = fs.read(handle, 4096)
@@ -47,33 +51,178 @@ local function readFile(fs, path)
   return table.concat(chunks)
 end
 
-local candidates, seen = {}, {}
-local bootAddress = computer.getBootAddress and computer.getBootAddress()
-if bootAddress then
-  candidates[#candidates + 1] = bootAddress
-  seen[bootAddress] = true
-end
-for address in component.list("filesystem", true) do
-  if not seen[address] then
-    candidates[#candidates + 1] = address
-    seen[address] = true
+local function clip(text, maxWidth)
+  text = tostring(text or "")
+  if maxWidth <= 0 then return "" end
+  if unicode and unicode.wtrunc then
+    local ok, value = pcall(unicode.wtrunc, text, maxWidth)
+    if ok and value then return value end
   end
+  return text:sub(1, maxWidth)
 end
 
-local bootFs, bootFsAddress
-for _, address in ipairs(candidates) do
-  local ok, fs = pcall(component.proxy, address)
-  if ok and fs then
-    local existsOk, exists = pcall(fs.exists, "/system/main.lua")
-    if existsOk and exists then
-      bootFs, bootFsAddress = fs, address
-      break
+local function formatBytes(value)
+  value = tonumber(value)
+  if not value then return "?" end
+  local units, index = {"B", "KiB", "MiB", "GiB"}, 1
+  while value >= 1024 and index < #units do value, index = value / 1024, index + 1 end
+  if index == 1 then return string.format("%d %s", value, units[index]) end
+  return string.format("%.1f %s", value, units[index])
+end
+
+local function collectFilesystems()
+  local entries = {}
+  for address in component.list("filesystem", true) do
+    local ok, fs = pcall(component.proxy, address)
+    if ok and fs then
+      local labelOk, label = pcall(fs.getLabel)
+      if not labelOk or not label or label == "" then label = "Filesystem " .. tostring(address):sub(1, 8) end
+      local existsOk, hasKernel = pcall(fs.exists, "/system/main.lua")
+      local totalOk, total = pcall(fs.spaceTotal)
+      local usedOk, used = pcall(fs.spaceUsed)
+      local readOnlyOk, readOnly = pcall(fs.isReadOnly)
+      local lowered = string.lower(tostring(label))
+      entries[#entries + 1] = {
+        address = address,
+        fs = fs,
+        label = tostring(label),
+        isRaid = lowered:find("raid", 1, true) ~= nil,
+        bootable = existsOk and hasKernel == true,
+        total = totalOk and total or nil,
+        used = usedOk and used or nil,
+        readOnly = readOnlyOk and readOnly or false
+      }
     end
   end
+  return entries
 end
 
+local function drawBootMenu(gpu, width, height, entries, selected, secondsLeft, message)
+  pcall(gpu.setBackground, BG)
+  pcall(gpu.setForeground, FG)
+  pcall(gpu.fill, 1, 1, width, height, " ")
+  local function line(y, text, color, background)
+    if y < 1 or y > height then return end
+    pcall(gpu.setBackground, background or BG)
+    pcall(gpu.setForeground, color or FG)
+    pcall(gpu.fill, 1, y, width, 1, " ")
+    pcall(gpu.set, 2, y, clip(text, math.max(0, width - 2)))
+  end
+
+  line(2, "       /\\", ACCENT)
+  line(3, "      /  \\    A S T R A O S", ACCENT)
+  line(4, "     /____\\", ACCENT)
+  line(6, "BIOS BOOT MANAGER", FG)
+  line(7, "Select AstraOS filesystem (disk or RAID array):", MUTED)
+
+  local firstRow = 9
+  local maxRows = math.max(1, height - firstRow - 3)
+  local firstEntry = math.max(1, math.min(selected, #entries - maxRows + 1))
+  local lastEntry = math.min(#entries, firstEntry + maxRows - 1)
+  local labelWidth = math.max(6, math.min(18, width - 38))
+  for i = firstEntry, lastEntry do
+    local entry = entries[i]
+    local marker = i == selected and ">" or " "
+    local kind = entry.isRaid and "RAID" or "DISK"
+    local status = entry.bootable and "READY" or "NO OS"
+    local size = entry.total and formatBytes(entry.total) or "size ?"
+    local defaultMark = entry.isDefault and " *" or ""
+    local readonlyMark = entry.readOnly and " RO" or ""
+    local labelFormat = "%-" .. tostring(labelWidth) .. "s"
+    local text = string.format("%s %d. %-4s " .. labelFormat .. " %-7s %s%s%s",
+      marker, i, kind, entry.label, size, status, defaultMark, readonlyMark)
+    line(firstRow + i - firstEntry, text, i == selected and BG or FG, i == selected and ACCENT or BG)
+  end
+  if #entries > maxRows then
+    line(firstRow + maxRows, string.format("Showing %d-%d of %d", firstEntry, lastEntry, #entries), MUTED)
+  end
+  if message then line(height - 2, message, 0xFFCC66) end
+  line(height - 1, string.format("UP/DOWN select | ENTER boot/save | auto %ds", secondsLeft), MUTED)
+  line(height, "RAID arrays appear here as one filesystem component.", MUTED)
+end
+
+local function saveBootChoice(entry)
+  if computer.setBootAddress then pcall(computer.setBootAddress, entry.address) end
+  return entry.fs, entry.address
+end
+
+local function chooseFilesystem(entries)
+  local bootAddress
+  if computer.getBootAddress then
+    local ok, value = pcall(computer.getBootAddress)
+    if ok then bootAddress = value end
+  end
+
+  local selected
+  for i, entry in ipairs(entries) do
+    entry.isDefault = entry.address == bootAddress
+    if entry.bootable and entry.isDefault then selected = i end
+  end
+  if not selected then
+    for i, entry in ipairs(entries) do
+      if entry.bootable then selected = i; break end
+    end
+  end
+  if not selected then return nil end
+
+  local gpuAddress, screenAddress = firstComponent("gpu"), firstComponent("screen")
+  local keyboardAddress = firstComponent("keyboard")
+  local gpu
+  if gpuAddress and screenAddress then
+    local ok, proxy = pcall(component.proxy, gpuAddress)
+    if ok then gpu = proxy end
+  end
+  if not gpu then return saveBootChoice(entries[selected]) end
+
+  pcall(gpu.bind, screenAddress)
+  local width, height = 80, 25
+  pcall(function() width, height = gpu.getResolution() end)
+  drawBootMenu(gpu, width, height, entries, selected, keyboardAddress and 5 or 0)
+  if not keyboardAddress then return saveBootChoice(entries[selected]) end
+
+  local timeoutTicks, elapsed = 20, 0 -- five seconds, polling every 0.25 s
+  while elapsed < timeoutTicks do
+    local ok, signal, _, char, code = pcall(computer.pullSignal, 0.25)
+    if not ok then break end
+    local changed = false
+    if signal == "key_down" then
+      if code == 200 then
+        selected = selected - 1
+        if selected < 1 then selected = #entries end
+        changed = true
+      elseif code == 208 then
+        selected = selected + 1
+        if selected > #entries then selected = 1 end
+        changed = true
+      elseif code == 28 or char == 13 then
+        if entries[selected].bootable then return saveBootChoice(entries[selected]) end
+        drawBootMenu(gpu, width, height, entries, selected, math.max(0, 5 - math.floor(elapsed / 4)), "This filesystem has no /system/main.lua")
+        elapsed = 0
+      elseif type(char) == "number" and char >= 49 and char <= 57 then
+        local target = char - 48
+        if entries[target] and entries[target].bootable then return saveBootChoice(entries[target]) end
+        if entries[target] then
+          selected = target
+          changed = true
+        end
+      end
+      if changed then
+        elapsed = 0
+        drawBootMenu(gpu, width, height, entries, selected, 5)
+      end
+    end
+    elapsed = elapsed + 1
+    if elapsed % 4 == 0 then
+      drawBootMenu(gpu, width, height, entries, selected, math.max(0, 5 - math.floor(elapsed / 4)))
+    end
+  end
+  return saveBootChoice(entries[selected])
+end
+
+local filesystems = collectFilesystems()
+local bootFs, bootFsAddress = chooseFilesystem(filesystems)
 if not bootFs then
-  showFailure("не найдена /system/main.lua на доступных дисках")
+  showFailure("no AstraOS installation found on connected filesystems")
 end
 
 local source, reason = readFile(bootFs, "/system/main.lua")

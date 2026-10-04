@@ -377,7 +377,7 @@ end
 local function copyPath(source, destination, recursive)
   local sourceOk, sourceIsDir = pcall(fs.isDirectory, source)
   if sourceOk and sourceIsDir then
-    if not recursive then return nil, "это каталог; используй cp -r" end
+    if not recursive then return nil, "для каталога нужен флаг -r" end
     local destinationOk, destinationIsDir = pcall(fs.isDirectory, destination)
     if destinationOk and destinationIsDir then destination = normalize(destination .. "/" .. basename(source)) end
     local sourcePrefix = source == "/" and "/" or (source .. "/")

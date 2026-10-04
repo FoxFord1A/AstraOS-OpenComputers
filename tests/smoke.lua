@@ -57,10 +57,13 @@ files.rename = function(oldPath, newPath)
   memoryFiles[newPath], memoryFiles[oldPath] = memoryFiles[oldPath], nil
   return true
 end
+local raidFiles = {}
+for name, value in pairs(files) do raidFiles[name] = value end
+raidFiles.getLabel = function() return "RAID Array" end
 
 local gpu = {}
 gpu.bind = function() return true end
-gpu.getResolution = function() return 80, 25 end
+gpu.getResolution = function() return 50, 16 end
 gpu.setBackground = function() end
 gpu.setForeground = function() end
 gpu.fill = function() end
@@ -69,7 +72,7 @@ gpu.set = function(_, _, text) drawn[#drawn + 1] = tostring(text); return true e
 
 component = {}
 component.list = function(filter, exact)
-  local all = { {"fsaddr", "filesystem"}, {"gpuaddr", "gpu"}, {"screenaddr", "screen"}, {"netaddr", "internet"} }
+  local all = { {"fsaddr", "filesystem"}, {"raidaddr", "filesystem"}, {"gpuaddr", "gpu"}, {"screenaddr", "screen"}, {"keyboardaddr", "keyboard"}, {"netaddr", "internet"} }
   local found = {}
   for _, item in ipairs(all) do
     if not filter or (exact and item[2] == filter) or (not exact and item[2]:find(filter, 1, true)) then
@@ -84,6 +87,7 @@ component.list = function(filter, exact)
 end
 component.proxy = function(address)
   if address == "fsaddr" then return files end
+  if address == "raidaddr" then return raidFiles end
   if address == "gpuaddr" then return gpu end
   if address == "screenaddr" then return { address = address, type = "screen" } end
   if address == "netaddr" then
@@ -105,15 +109,20 @@ component.proxy = function(address)
   error("unknown component " .. tostring(address))
 end
 
-local signals = {}
+local signals = {
+  {"key_down", "keyboard", 0, 208}, -- choose the RAID filesystem
+  {"key_down", "keyboard", 0, 28}   -- boot and remember it
+}
 local commands = {"about", "free", "uptime", "which ls", "df", "du /system/main.lua", "head -n 1 /system/main.lua", "tail -n 1 /system/main.lua", "tree /", "find / main.lua", "wc /system/main.lua", "grep AstraOS /system/main.lua", "man grep", "rm -r /system", "cp /system /tmp", "wget https://example.test/payload /virtual/payload.txt", "alias hi echo hello", "hi world"}
 for _, command in ipairs(commands) do
   for i = 1, #command do signals[#signals + 1] = {"key_down", "keyboard", command:byte(i), 0} end
   signals[#signals + 1] = {"key_down", "keyboard", 0, 28}
 end
 local signalIndex = 0
+local savedBootAddress
 computer = {
   getBootAddress = function() return "fsaddr" end,
+  setBootAddress = function(address) savedBootAddress = address; return true end,
   pullSignal = function()
     signalIndex = signalIndex + 1
     local event = signals[signalIndex]
@@ -140,6 +149,9 @@ assert(boot, loadError)
 local ok, err = pcall(boot)
 assert(not ok and tostring(err):find("TEST_STOP", 1, true), "test sentinel did not stop the OS loop")
 local screenText = table.concat(drawn, "\n")
+assert(savedBootAddress == "raidaddr", "BIOS did not save the selected RAID boot address")
+assert(screenText:find("A S T R A O S", 1, true), "BIOS logo was not rendered")
+assert(screenText:find("RAID", 1, true), "RAID filesystem was not listed in the BIOS menu")
 assert(screenText:find("AstraOS 0.2", 1, true), "boot banner was not rendered")
 assert(screenText:find("компактная ОС", 1, true), "about command did not run")
 assert(screenText:find("RAM свободно", 1, true), "free command did not run")
@@ -149,6 +161,6 @@ assert(screenText:find("main.lua", 1, true), "tree/find/head/tail commands did n
 assert(screenText:find("hello world", 1, true), "alias expansion did not run")
 assert(screenText:find("AstraOS 0.2 | Lua", 1, true), "grep command did not return a match")
 assert(screenText:find("защищён системный путь", 1, true), "rm did not protect system files")
-assert(screenText:find("используй cp -r", 1, true), "cp did not require -r for directories")
+assert(screenText:find("нужен флаг -r", 1, true), "cp did not require -r for directories")
 assert(memoryFiles["/virtual/payload.txt"] == "AstraOS\n", "wget did not download the HTTP response")
-print("PASS: BIOS booted AstraOS, rendered the shell and ran OpenOS-style utilities and aliases.")
+print("PASS: BIOS logo/menu selected and saved RAID boot; AstraOS shell and utilities passed.")
